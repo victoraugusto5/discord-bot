@@ -1,84 +1,121 @@
 import discord
+from discord.ext import commands
 import random
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-client = discord.Client(intents=intents)
+bot = commands.Bot(command_prefix='$', intents=intents)
 
-jogos = {}  
+jogos = {}
 
-@client.event
-async def on_ready():
-    print(f'Logado como {client.user}')
-
-async def cmd_hello(message):
-    await message.channel.send("Hello!")
-
-
-async def cmd_bye(message):
-    await message.channel.send("🙂")
-
-async def cmd_emoji(message):
-    await message.channel.send("😂​")
-
-async def cmd_adivinhar(message):
-    if message.author.id in jogos:
-        await message.channel.send("⚠️ Você já está em um jogo!")
-        return
+@bot.command()
+async def adivinhar(ctx):
     numero = random.randint(1, 20)
-    jogos[message.author.id] = {
-        "numero": numero,
-        "tentativas": 5
-    }
-    await message.channel.send(
-        "Pensei em um número de **1 a 20**.\n"
-        "Você tem **5 tentativas**. Envie um número!"
+    # Correção: Definir chaves corretamente como strings e inicializar
+    jogos[ctx.author.id] = { "numero": numero, "tentativas": 5 }
+    await ctx.send(
+        "🎲 Pensei em um número de **1 a 20**.\n"
+        "Você tem **5 tentativas**. Envie `$guess <número>`!"
     )
 
-async def cmd_tentativa(message):
-    user_id = message.author.id
-    content = message.content.strip()
-
-    if user_id not in jogos:
-        return  
-    if not content.isdigit():
+@bot.command()
+async def guess(ctx, palpite: int):
+    if ctx.author.id not in jogos:
+        await ctx.send("❌ Você ainda não iniciou um jogo. Use `$adivinhar` primeiro.")
         return
 
-    tentativa = int(content)
-    jogo = jogos[user_id]
+    jogo = jogos[ctx.author.id]
+    # Correção: Acessar a chave 'numero' corretamente
+    numero_secreto = jogo["numero"]
+    
+    # Reduzir tentativa
     jogo["tentativas"] -= 1
-
-    if tentativa > jogo["numero"]:
-        await message.channel.send("O número é menor.")
-    elif tentativa < jogo["numero"]:
-        await message.channel.send("O número é maior.")
-    else:
-        await message.channel.send("🎉 Você acertou!")
-        del jogos[user_id]
+    
+    if palpite == numero_secreto:
+        await ctx.send(f"🎉 **Parabéns! Você acertou!** O número era {numero_secreto}.")
+        del jogos[ctx.author.id]
         return
 
+    # Verificar se acabaram as tentativas
     if jogo["tentativas"] <= 0:
-        await message.channel.send(f"Acabaram as tentativas. O número era {jogo['numero']}.")
-        del jogos[user_id]
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
+        await ctx.send(f"💥 Acabaram as tentativas. O número era **{numero_secreto}**.")
+        del jogos[ctx.author.id]
         return
-    if message.content == '$hello':
-        await cmd_hello(message)
 
-    elif message.content == '$bye':
-        await cmd_bye(message)
-    
-    elif message.content == '$emoji':
-        await cmd_emoji(message)
-    
-    elif message.content == '$adivinhar':
-        await cmd_adivinhar(message)
-
-    elif message.author.id in jogos and message.content.isdigit():
-        await cmd_tentativa(message)
+    # Dicas
+    if palpite < numero_secreto:
+        dica = "maior"
     else:
-        await message.channel.send(message.content) 
+        dica = "menor"
+
+    await ctx.send(
+        f"❌ Errou! O número é **{dica}**.\n"
+        f"Tentativas restantes: **{jogo['tentativas']}**"
+    ) 
+
+@bot.event
+async def on_ready():
+    print(f'Estamos logados como {bot.user}')
+
+@bot.command()
+async def soma(ctx:commands.Context, num1:int, num2:int):
+    resultado = num1 + num2
+    await ctx.send(f"A soma entre {num1} e {num2} é igual a {resultado}")
+
+@bot.command()
+async def subtrair(ctx:commands.Context, num1:int, num2:int):
+    resultado = num1 - num2
+    await ctx.send(f"A diferença entre {num1} e {num2} é igual a {resultado}") 
+
+@bot.command()
+async def multiplicar(ctx:commands.Context, num1:int, num2:int):
+    resultado = num1 * num2
+    await ctx.send(f"O produto entre {num1} e {num2} é igual a {resultado}") 
+
+@bot.command()
+async def dividir(ctx:commands.Context, num1:int, num2:int):
+    resultado = num1 / num2
+    await ctx.send(f"O quociente entre {num1} e {num2} é igual a {resultado}") 
+
+@bot.command()
+async def funcoes(ctx:commands.Context):
+    nome = ctx.author.name
+    await ctx.send(f"{nome} As funçoes que vc pode utilizar são $adivinhar, $emoji, $bye, $hello, $soma, $subtrair, $multiplicar, $dividir, dado")
+
+@bot.command()
+async def hello(ctx:commands.Context):
+    nome = ctx.author.name
+    await ctx.send(f'Ola!  {nome}')
+
+@bot.command()
+async def bye(ctx):
+    await ctx.send('😭')
+
+@bot.command()
+async def emoji(ctx):
+    await ctx.send('😂')
+
+@bot.command()
+async def dado(ctx, dice: str):
+    try:
+        rolls, limit = map(int, dice.lower().split('d'))
+
+        if rolls <= 0 or limit <= 0:
+            await ctx.send("Os valores precisam ser maiores que zero.")
+            return
+        if rolls > 20:
+            await ctx.send("Máximo de 20 dados por vez!")
+            return
+
+    except Exception:
+        await ctx.send("Use o formato NdN (ex: 2d6)")
+        return
+
+    resultados = [random.randint(1, limit) for _ in range(rolls)]
+    total = sum(resultados)
+    await ctx.send(
+        f"🎲 Resultados: {', '.join(map(str, resultados))}\n"
+        f" Total: **{total}**"
+    )
+
